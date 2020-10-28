@@ -1,0 +1,3 @@
+#!/bin/bash
+cat q3data | sort -k 2 -r n
+
