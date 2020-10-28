@@ -1,0 +1,26 @@
+##关于waf配置，这里提供通过nginx的lua模块在配置文件中实现的web页基本防御
+##验证浏览器行为, 通过鉴别cookie功能的方式来鉴别是浏览器正常访问还是攻击的行为
+##使用salt加散列的模式，根据访问ip计算出对应散列值的302重定向包，如果访问这能够在第二个包中上cookie值，即可正常访问网站，如果不能，则指向302
+
+rewrite_by_lua '
+    local say = ngx.md5("demo" .. ngx.var.remote_addr)
+    if (ngx.var.cookie_say ~= say) then 
+        ngx.header["Set-Cookie"] = "say=" .. say
+        return ngx.redirect(ngx.var.scheme .. "://" .. ngx.var.host .. ngx.var.uri)
+end';
+##请求频率限制, 通过随机数，让同一个IP的用户也能有不同的token
+rewrite_by_lua '
+    local random = ngx.var.cookie_random
+    if(random == nil) then
+        random = math.random(999999)
+    end
+    local token = ngx.md5("demo" .. ngx.var.remote_addr .. random)
+    if (ngx.var.cookie_token ~= token) then
+        ngx.header["Set-Cookie"] = {"token=" .. token, "random=" .. random}
+        return ngx.redirect(ngx.var.scheme .. "://" .. ngx.var.host .. ngx.var.uri)
+end';
+##根据token在session层面做限制
+http {
+     limit_req_zone $cookie_token zone=session_limit:3m rate=1r/s;
+     limit_req zone=session_limit burst=5;
+}
